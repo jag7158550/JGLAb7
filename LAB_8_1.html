@@ -1,0 +1,140 @@
+<html>
+<head>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Verdana, sans-serif; }
+        .node circle {
+            stroke: #333;
+            stroke-width: .5px;
+            cursor: pointer;
+        }
+        .node circle:hover {
+            stroke-width: 2px !important;
+            opacity: 1 !important;
+        }
+        #header {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 10;
+            padding: 10px 0;
+        }
+        h1 { font-size: 20px; margin: 0; }
+        p { font-size: 12px; margin: 5px 0 0 0; }
+        
+        .tooltip {
+            position: absolute;
+            pointer-events: none; /* Critical: prevents flickering */
+            background: white;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>Top 200 Cities by Population (2020)</h1>
+        <p>Sized by population | Colors by country</p>
+    </div>
+    <div id="my_dataviz"></div>
+
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script>
+    var width = window.innerWidth, 
+        height = window.innerHeight, 
+        nodePadding = 3;
+
+    var svg = d3.select("#my_dataviz")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    // 1. Brighter, high-contrast color scheme
+    var color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // 2. Square Root Scale for perceptually accurate sizing
+    // Maps population (approx 1m to 38m) to radius (5px to 70px)
+    var radiusScale = d3.scaleSqrt()
+        .domain([0, 40]) 
+        .range([3, 70]); 
+
+    var simulation = d3.forceSimulation()
+        .force("forceX", d3.forceX().strength(.1).x(width * .5))
+        .force("forceY", d3.forceY().strength(.1).y(height * .5))
+        .force("center", d3.forceCenter().x(width * .5).y(height * .5))
+        .force("charge", d3.forceManyBody().strength(-15))
+        .force("collide", d3.forceCollide().strength(1).radius(d => d.radius + nodePadding).iterations(2));
+
+    d3.csv("https://raw.githubusercontent.com/jag7158550/JGLAb7/refs/heads/main/CityData_WUP2018_all.csv", types, function(error, graph){
+        if (error) throw error;
+
+        // Sort so smaller bubbles are on top (easier to hover)
+        graph = graph.sort((a, b) => b.pop2020 - a.pop2020);
+
+        var Tooltip = d3.select("#my_dataviz")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        var mouseover = function(d) { Tooltip.style("opacity", 1); };
+        
+        var mousemove = function(d) {
+            Tooltip
+                .html("<strong>" + d.CityName + "</strong><br/>" + d.Country + "<br/>" + d3.format(".1f")(d.pop2020) + "m population")
+                .style("left", (d3.event.pageX + 15) + "px")
+                .style("top", (d3.event.pageY - 15) + "px");
+        };
+
+        var mouseleave = function(d) { Tooltip.style("opacity", 0); };
+
+        var node = svg.append("g")
+            .attr("class", "node")
+            .selectAll("circle")
+            .data(graph)
+            .enter().append("circle")
+            .attr("r", d => d.radius)
+            // Using HSL to ensure colors are vibrant and "bright"
+            .attr("fill", d => d3.hsl(color(d.Country)).brighter(0.6))
+            .attr("opacity", 0.9)
+            .on("mouseover", mouseover)
+            .on("mousemove", mousemove)
+            .on("mouseleave", mouseleave)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+
+        simulation.nodes(graph).on("tick", function() {
+            node.attr("cx", d => d.x).attr("cy", d => d.y);
+        });
+    });
+
+    function dragstarted(d) {
+        if (!d3.event.active) simulation.alphaTarget(.03).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(d) {
+        d.fx = d3.event.x;
+        d.fy = d3.event.y;
+    }
+
+    function dragended(d) {
+        if (!d3.event.active) simulation.alphaTarget(.03);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    function types(d){
+        d.pop2020 = +d.pop2020;
+        d.radius = radiusScale(d.pop2020); 
+        return d;
+    }
+    </script>
+</body>
+</html>
